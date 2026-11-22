@@ -1,0 +1,149 @@
+name: PR Policy
+
+# Enforces the Pull Request Policy in CONTRIBUTING.md.
+#
+# Runs on pull_request_target so it can comment on and close pull requests from
+# forks. It never checks out or runs code from the pull request, and it reads
+# pull request fields only from the event payload and the API, never through
+# expression interpolation into the script.
+
+on: # yamllint disable-line rule:truthy
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions: read-all
+
+concurrency:
+  group: pr-policy-${{ github.event.pull_request.number }}
+
+jobs:
+  enforce:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Enforce pull request policy
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const ACCEPTED_LABELS = ['triage/accepted', 'help wanted', 'good first issue'];
+            const EXEMPT_LABEL = 'policy/exempt';
+            const MAX_OPEN_PRS = 3;
+            const SMALL_MAX_LINES = 20;
+            const SMALL_MAX_FILES = 2;
+            const MAX_LINKED_ISSUES = 10;
+
+            const { owner, repo } = context.repo;
+            const pr = context.payload.pull_request;
+            const author = pr.user.login;
+            const policyURL = `https://github.com/${owner}/${repo}/blob/main/CONTRIBUTING.md#pull-request-policy-`;
+
+            async function hasWriteAccess(username) {
+              try {
+                const { data } = await github.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username });
+                return ['admin', 'write'].includes(data.permission);
+              } catch (err) {
+                if (err.status === 404) return false;
+                throw err;
+              }
+            }
+
+            if (pr.user.type === 'Bot') {
+              core.info(`Skipping bot author ${author}`);
+              return;
+            }
+            if (pr.labels.some((l) => l.name === EXEMPT_LABEL)) {
+              core.info(`Skipping: labeled ${EXEMPT_LABEL}`);
+              return;
+            }
+            if (await hasWriteAccess(author)) {
+              core.info(`Skipping: ${author} has write access`);
+              return;
+            }
+            if (context.payload.action === 'reopened' && (await hasWriteAccess(context.actor))) {
+              core.info(`Skipping: reopened by ${context.actor}, who has write access`);
+              return;
+            }
+
+            const violations = [];
+
+            // Rule 1: link an issue that a maintainer has triaged.
+            const isSmall = pr.additions + pr.deletions <= SMALL_MAX_LINES && pr.changed_files <= SMALL_MAX_FILES;
+            if (isSmall) {
+              core.info('Small pull request: skipping the triaged issue check');
+            } else {
+              const linked = new Set();
+
+              const { repository } = await github.graphql(
+                `query($owner: String!, $repo: String!, $number: Int!) {
+                  repository(owner: $owner, name: $repo) {
+                    pullRequest(number: $number) {
+                      closingIssuesReferences(first: 10) { nodes { number } }
+                    }
+                  }
+                }`,
+                { owner, repo, number: pr.number },
+              );
+              for (const node of repository.pullRequest.closingIssuesReferences.nodes) {
+                linked.add(node.number);
+              }
+
+              const body = pr.body || '';
+              const refPattern = new RegExp(
+                `(?:github\\.com/${owner}/${repo}/issues/|(?<![\\w/])#)(\\d+)`,
+                'gi',
+              );
+              for (const match of body.matchAll(refPattern)) {
+                linked.add(Number(match[1]));
+              }
+
+              let triaged = false;
+              for (const number of [...linked].slice(0, MAX_LINKED_ISSUES)) {
+                if (number === pr.number) continue;
+                try {
+                  const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number: number });
+                  if (issue.pull_request) continue;
+                  if (issue.labels.some((l) => ACCEPTED_LABELS.includes(typeof l === 'string' ? l : l.name))) {
+                    core.info(`Found triaged issue #${number}`);
+                    triaged = true;
+                    break;
+                  }
+                } catch (err) {
+                  if (err.status !== 404) throw err;
+                }
+              }
+
+              if (!triaged) {
+                const labels = ACCEPTED_LABELS.map((l) => `\`${l}\``).join(', ');
+                violations.push(
+                  `**Rule 1, no triaged issue.** This pull request does not link an issue labeled ${labels}.`,
+                );
+              }
+            }
+
+            // Rule 2: at most MAX_OPEN_PRS open pull requests per contributor.
+            const openPRs = await github.paginate(github.rest.pulls.list, { owner, repo, state: 'open', per_page: 100 });
+            const authorOpen = openPRs.filter((p) => p.user.login === author).length;
+            if (authorOpen > MAX_OPEN_PRS) {
+              violations.push(
+                `**Rule 2, too many open pull requests.** @${author} has ${authorOpen} open pull requests; the limit is ${MAX_OPEN_PRS}.`,
+              );
+            }
+
+            if (violations.length === 0) {
+              core.info('Pull request meets the policy');
+              return;
+            }
+
+            const message = [
+              `Thanks for the contribution, @${author}. This pull request closes automatically under the [Pull Request Policy](${policyURL}):`,
+              '',
+              ...violations.map((v) => `- ${v}`),
+              '',
+              'Maintainers agree on the direction of a change in an issue before reviewing code. Once the linked issue carries one of the labels above, and you have no more than the allowed number of open pull requests, open a new pull request or ask a maintainer to reopen this one.',
+            ].join('\n');
+
+            await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body: message });
+            await github.rest.pulls.update({ owner, repo, pull_number: pr.number, state: 'closed' });
+            core.notice(`Closed #${pr.number}: ${violations.length} policy violation(s)`);

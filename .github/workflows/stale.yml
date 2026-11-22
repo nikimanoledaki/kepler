@@ -32,3 +32,26 @@ jobs:
           exempt-issue-labels: keepalive,security,help wanted,good first issue,proposal,objective,key-result,urgent-priority,high-priority
           exempt-pr-labels: keepalive,security
           exempt-all-milestones: true
+
+  waiting-on-author:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      # Closing rule 3 in CONTRIBUTING.md: close pull requests labeled
+      # `waiting-on-author` after 14 days without activity plus 7 days stale.
+      - uses: actions/stale@v11
+        with:
+          stale-pr-message: >-
+            This pull request has waited on the author for 14 days. It closes in
+            7 days without activity. See the Pull Request Policy in CONTRIBUTING.md.
+          close-pr-message: >-
+            Closing under rule 3 of the Pull Request Policy in CONTRIBUTING.md.
+            Push the requested changes and ask a maintainer to reopen it.
+          days-before-issue-stale: -1
+          days-before-issue-close: -1
+          days-before-pr-stale: 14
+          days-before-pr-close: 7
+          any-of-pr-labels: waiting-on-author
+          stale-pr-label: stale
+          exempt-pr-labels: keepalive,security
