@@ -84,7 +84,7 @@ Enforced by the [`pr-policy`](.github/workflows/pr-policy.yaml) workflow:
 1. **No triaged issue.** The pull request does not link an issue with one of
    the labels above.
 2. **Too many open pull requests.** Contributors without write access may have
-   at most 3 open pull requests at once.
+   at most 3 open pull requests at once, drafts included.
 
 Enforced by the [`stale`](.github/workflows/stale.yml) workflow:
 

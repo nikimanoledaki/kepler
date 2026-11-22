@@ -122,7 +122,7 @@ jobs:
               }
             }
 
-            // Rule 2: at most MAX_OPEN_PRS open pull requests per contributor.
+            // Rule 2: at most MAX_OPEN_PRS open pull requests per contributor, drafts included.
             const openPRs = await github.paginate(github.rest.pulls.list, { owner, repo, state: 'open', per_page: 100 });
             const authorOpen = openPRs.filter((p) => p.user.login === author).length;
             if (authorOpen > MAX_OPEN_PRS) {
