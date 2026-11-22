@@ -17,6 +17,8 @@ Our project adheres to the Linux Foundation's Generative AI Policy, which can be
 
 Disclose AI assistance in the pull request description. You are responsible for every line you submit and must be able to explain it in review.
 
+Pull request descriptions, issue comments, and replies to review should be in your own words, not pasted from an AI tool. AI-assisted code is fine; the conversation with maintainers should come from you.
+
 ## How Do I Start Contributing? 🚀
 
 1. Find or open an issue, and wait for a maintainer to triage it (see [Pull Request Policy](#pull-request-policy-))
