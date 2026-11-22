@@ -28,6 +28,7 @@ jobs:
         with:
           script: |
             const ACCEPTED_LABELS = ['triage/accepted', 'help wanted', 'good first issue'];
+            const FIRST_ISSUE_LABEL = 'good first issue';
             const EXEMPT_LABEL = 'policy/exempt';
             const MAX_OPEN_PRS = 3;
             const SMALL_MAX_LINES = 20;
@@ -99,22 +100,36 @@ jobs:
               }
 
               let triaged = false;
+              const unassignedFirstIssues = [];
               for (const number of [...linked].slice(0, MAX_LINKED_ISSUES)) {
                 if (number === pr.number) continue;
                 try {
                   const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number: number });
                   if (issue.pull_request) continue;
-                  if (issue.labels.some((l) => ACCEPTED_LABELS.includes(typeof l === 'string' ? l : l.name))) {
-                    core.info(`Found triaged issue #${number}`);
-                    triaged = true;
-                    break;
+                  const accepted = issue.labels
+                    .map((l) => (typeof l === 'string' ? l : l.name))
+                    .filter((name) => ACCEPTED_LABELS.includes(name));
+                  if (accepted.length === 0) continue;
+                  // A `good first issue` alone needs a maintainer to assign it to the author.
+                  const firstIssueOnly = accepted.every((name) => name === FIRST_ISSUE_LABEL);
+                  if (firstIssueOnly && !issue.assignees.some((a) => a.login === author)) {
+                    unassignedFirstIssues.push(number);
+                    continue;
                   }
+                  core.info(`Found triaged issue #${number}`);
+                  triaged = true;
+                  break;
                 } catch (err) {
                   if (err.status !== 404) throw err;
                 }
               }
 
-              if (!triaged) {
+              if (!triaged && unassignedFirstIssues.length > 0) {
+                const refs = unassignedFirstIssues.map((n) => `#${n}`).join(', ');
+                violations.push(
+                  `**Rule 1, no triaged issue.** ${refs} is a \`${FIRST_ISSUE_LABEL}\` that is not assigned to @${author}. Comment on the issue and ask a maintainer to assign it to you.`,
+                );
+              } else if (!triaged) {
                 const labels = ACCEPTED_LABELS.map((l) => `\`${l}\``).join(', ');
                 violations.push(
                   `**Rule 1, no triaged issue.** This pull request does not link an issue labeled ${labels}.`,

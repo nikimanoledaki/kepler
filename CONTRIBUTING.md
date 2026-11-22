@@ -61,6 +61,9 @@ as triaged when it carries one of these labels:
 Only maintainers can apply these labels. Opening an issue and a pull request
 together does not count as triage.
 
+A `good first issue` also needs a maintainer to assign it to you before you open
+a pull request. Comment on the issue to ask for it.
+
 Link the issue in the pull request description, for example `Closes #123` or
 `Part of #123`. Features and design changes also need an accepted
 [enhancement proposal](docs/developer/proposal/EP-TEMPLATE.md) before

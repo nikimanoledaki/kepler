@@ -2,7 +2,8 @@
 
 <!--
 Link an issue labeled `triage/accepted`, `help wanted`, or `good first issue`.
-Pull requests without one close automatically. See
+A `good first issue` must also be assigned to you. Pull requests without a
+triaged issue close automatically. See
 https://github.com/sustainable-computing-io/kepler/blob/main/CONTRIBUTING.md#pull-request-policy-
 -->
 
@@ -18,6 +19,6 @@ Closes #
 
 ## Checklist
 
-- [ ] The linked issue carries `triage/accepted`, `help wanted`, or `good first issue`
+- [ ] The linked issue carries `triage/accepted`, `help wanted`, or `good first issue` (assigned to me)
 - [ ] I can explain every line of this change in review
 - [ ] Commits are signed off ([DCO](https://github.com/sustainable-computing-io/kepler/blob/main/DCO))
